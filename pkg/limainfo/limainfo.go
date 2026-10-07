@@ -7,11 +7,15 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/lima-vm/lima/v2/pkg/driver"
+	"github.com/lima-vm/lima/v2/pkg/driver/external/server"
 	"github.com/lima-vm/lima/v2/pkg/envutil"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
 	"github.com/lima-vm/lima/v2/pkg/limatype/dirnames"
@@ -43,10 +47,44 @@ type LimaInfo struct {
 
 type DriverExt struct {
 	Location string `json:"location,omitempty"` // since Lima v2.0.0
+	// Features is nil when the capabilities could not be queried.
+	Features *driver.DriverFeatures `json:"features,omitempty"` // since Lima v2.7.0
 }
 
 type GuestAgent struct {
 	Location string `json:"location"` // since Lima v1.1.0
+}
+
+// driverFeatures returns nil when the driver is unknown or cannot be queried.
+func driverFeatures(ctx context.Context, name string) *driver.DriverFeatures {
+	queryCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	extDriver, intDriver, exists := registry.Get(name)
+	if !exists {
+		return nil
+	}
+	if intDriver != nil {
+		features := intDriver.Info(queryCtx).Features
+		return &features
+	}
+
+	// An external driver must be started to answer; use a temporary directory
+	// so that no instance is touched.
+	tmpDir, err := os.MkdirTemp("", "lima-info-")
+	if err != nil {
+		logrus.WithError(err).Debugf("Failed to query the features of the external driver %q", name)
+		return nil
+	}
+	defer os.RemoveAll(tmpDir)
+	if err := server.Start(queryCtx, extDriver, tmpDir); err != nil {
+		logrus.WithError(err).Debugf("Failed to query the features of the external driver %q", name)
+		return nil
+	}
+	defer server.Stop(tmpDir, true)
+
+	features := extDriver.Client.Info(queryCtx).Features
+	return &features
 }
 
 // New returns a LimaInfo object with the Lima version, a list of all Templates and their location,
@@ -71,6 +109,7 @@ func New(ctx context.Context) (*LimaInfo, error) {
 	for name, path := range reg {
 		vmTypesEx[name] = DriverExt{
 			Location: path,
+			Features: driverFeatures(ctx, name),
 		}
 		vmTypes = append(vmTypes, name)
 	}

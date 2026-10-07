@@ -149,6 +149,8 @@ type Info struct {
 type DriverFeatures struct {
 	// CanRunGUI reports that the driver can display a GUI via RunGUI.
 	CanRunGUI bool `json:"canRunGui,omitempty"`
+	// CanSnapshot reports that the driver implements SnapshotManager.
+	CanSnapshot bool `json:"canSnapshot,omitempty"`
 	// DynamicSSHAddress reports that the SSH address is not known until after
 	// Start, so the host agent re-queries SSHAddress once the VM is running.
 	DynamicSSHAddress bool `json:"dynamicSSHAddress"`

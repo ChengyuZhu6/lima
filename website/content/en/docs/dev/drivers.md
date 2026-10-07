@@ -141,6 +141,21 @@ For the full per-method contract, see the doc comments in
 [`driver.proto`](https://github.com/lima-vm/lima/blob/master/pkg/driver/external/driver.proto)
 and the [`driver.Driver`](https://pkg.go.dev/github.com/lima-vm/lima/v2/pkg/driver#Driver) godoc.
 
+## Driver capabilities
+
+A driver declares what it can do in `driver.DriverFeatures`, returned by
+`Info()`. `limactl info` reports these per VM type under `vmTypesEx`:
+
+```console
+$ limactl info --yq '.vmTypesEx.qemu.features'
+{"canSnapshot": true, "supportedImageFormats": ["qcow2", "raw", "vmdk", "vhdx"]}
+```
+
+`limactl info` queries internal drivers directly. External drivers have to be
+started to answer, so `limactl info` starts each of them in a temporary
+directory, reads `Info()`, and shuts them down again. `features` is omitted when
+that fails, so a driver that cannot be started does not break the command.
+
 ## Examples
 
 See existing external driver implementations:
